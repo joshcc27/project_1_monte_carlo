@@ -155,3 +155,111 @@ def bs_vega(S0, K, T, r, sigma):
 
     d1, _ = _d1_d2(S0, K, T, r, sigma)
     return S0 * math.sqrt(T) * norm.pdf(d1)
+
+
+def bs_gamma(S0, K, T, r, sigma):
+    """Return Black-Scholes gamma.
+
+    Gamma is the second derivative of option price with respect to spot.
+    It is the same for calls and puts (put-call parity implies equal gammas).
+
+    Parameters
+    ----------
+    S0 : float
+        Spot price.
+    K : float
+        Strike price.
+    T : float
+        Time to maturity in years.
+    r : float
+        Continuously compounded risk-free rate.
+    sigma : float
+        Volatility (annualized, decimal).
+
+    Returns
+    -------
+    float
+        Analytic Black-Scholes gamma.
+    """
+    d1, _ = _d1_d2(S0, K, T, r, sigma)
+    return norm.pdf(d1) / (S0 * sigma * math.sqrt(T))
+
+
+def bs_theta(S0, K, T, r, sigma, option_type):
+    """Return Black-Scholes theta (per year).
+
+    Theta is the rate of change of option price with respect to calendar time
+    (i.e. ``dV/dt = -dV/dT``). Typically negative for long positions.
+
+    Parameters
+    ----------
+    S0 : float
+        Spot price.
+    K : float
+        Strike price.
+    T : float
+        Time to maturity in years.
+    r : float
+        Continuously compounded risk-free rate.
+    sigma : float
+        Volatility (annualized, decimal).
+    option_type : str
+        Option side, case-insensitive: ``"call"`` or ``"put"``.
+
+    Returns
+    -------
+    float
+        Analytic Black-Scholes theta (annualized).
+
+    Raises
+    ------
+    ValueError
+        If numeric inputs are invalid or ``option_type`` is not supported.
+    """
+    d1, d2 = _d1_d2(S0, K, T, r, sigma)
+    disc = math.exp(-r * T)
+    option_type = normalise_option_type(option_type)
+    # Common term: time decay from the diffusion component.
+    decay = -(S0 * sigma * norm.pdf(d1)) / (2.0 * math.sqrt(T))
+    if option_type == "call":
+        return decay - r * K * disc * norm.cdf(d2)
+    return decay + r * K * disc * norm.cdf(-d2)
+
+
+def bs_rho(S0, K, T, r, sigma, option_type):
+    """Return Black-Scholes rho (per unit change in r).
+
+    Rho is the first derivative of option price with respect to the
+    continuously compounded risk-free rate.
+
+    Parameters
+    ----------
+    S0 : float
+        Spot price.
+    K : float
+        Strike price.
+    T : float
+        Time to maturity in years.
+    r : float
+        Continuously compounded risk-free rate.
+    sigma : float
+        Volatility (annualized, decimal).
+    option_type : str
+        Option side, case-insensitive: ``"call"`` or ``"put"``.
+
+    Returns
+    -------
+    float
+        Analytic Black-Scholes rho.
+
+    Raises
+    ------
+    ValueError
+        If numeric inputs are invalid or ``option_type`` is not supported.
+    """
+    _, d2 = _d1_d2(S0, K, T, r, sigma)
+    disc = math.exp(-r * T)
+    option_type = normalise_option_type(option_type)
+    if option_type == "call":
+        return K * T * disc * norm.cdf(d2)
+    return -K * T * disc * norm.cdf(-d2)

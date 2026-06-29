@@ -37,6 +37,32 @@ def test_bs_vega_matches_known_values():
     assert np.isclose(bs_vega(S0, K, T, r, sigma), VEGA, rtol=0, atol=1e-9)
 
 
+def test_bs_gamma_matches_known_value():
+    from src.bs_analytics import bs_gamma
+    gamma = bs_gamma(S0, K, T, r, sigma)
+    assert gamma > 0
+    assert np.isclose(gamma, 0.018762017345846895, rtol=0, atol=1e-9)
+
+
+def test_bs_theta_matches_known_values():
+    from src.bs_analytics import bs_theta
+    call_theta = bs_theta(S0, K, T, r, sigma, "call")
+    put_theta = bs_theta(S0, K, T, r, sigma, "put")
+    assert call_theta < 0
+    assert np.isclose(call_theta, -6.414027546438196, rtol=0, atol=1e-9)
+    assert np.isclose(put_theta, -1.6578804239346256, rtol=0, atol=1e-9)
+
+
+def test_bs_rho_matches_known_values():
+    from src.bs_analytics import bs_rho
+    call_rho = bs_rho(S0, K, T, r, sigma, "call")
+    put_rho = bs_rho(S0, K, T, r, sigma, "put")
+    assert call_rho > 0
+    assert put_rho < 0
+    assert np.isclose(call_rho, 53.232481545376345, rtol=0, atol=1e-9)
+    assert np.isclose(put_rho, -41.89046090469506, rtol=0, atol=1e-9)
+
+
 def test_bs_put_call_parity_holds():
     # Exact Black-Scholes parity: C - P = S0 - K * exp(-rT).
     # This confirms call/put formulas are internally consistent.

@@ -47,6 +47,17 @@ def test_simulate_gbm_paths_with_explicit_shocks_matches_formula():
     assert np.allclose(paths, expected[None, :])
 
 
+def test_simulate_gbm_paths_rejects_float_steps():
+    # steps must be an integer; passing a float should raise TypeError.
+    with pytest.raises(TypeError, match="steps must be an integer"):
+        simulate_gbm_paths(100.0, 0.05, 0.2, 1.0, steps=10.0, n_paths=100, rng=RNG(seed=1))
+
+
+def test_simulate_gbm_paths_rejects_float_n_paths():
+    with pytest.raises(TypeError, match="n_paths must be an integer"):
+        simulate_gbm_paths(100.0, 0.05, 0.2, 1.0, steps=10, n_paths=100.0, rng=RNG(seed=1))
+
+
 def test_simulate_gbm_paths_rejects_invalid_shocks_shape():
     # Shock matrix must match (n_paths, steps) exactly.
     with pytest.raises(ValueError, match=r"shocks must have shape"):

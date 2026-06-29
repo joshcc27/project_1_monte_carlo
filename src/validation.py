@@ -10,7 +10,9 @@ def validate_positive(value, name):
 
 
 def validate_positive_int(value, name):
-    """Require a scalar integer-like value to be strictly positive."""
+    """Require a value to be a strictly positive integer."""
+    if not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
     if value <= 0:
         raise ValueError(f"{name} must be positive")
 

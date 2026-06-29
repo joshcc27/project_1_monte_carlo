@@ -10,8 +10,9 @@ The module focuses on variance-reduction mechanics. Result-schema construction
 and confidence-interval conventions are delegated to ``src.mc_results``.
 """
 import numpy as np
+from .asian_geometric import price_geometric_asian
 from .gbm import simulate_gbm_paths
-from .mc_results import build_result_antithetic, discount_payoffs
+from .mc_results import build_result_antithetic, build_result_iid, discount_payoffs
 from .payoffs import asian_arithmetic_payoff, european_payoff
 
 
@@ -239,3 +240,72 @@ def control_variate(X, Y, EY):
     est = X_cv.mean()
     stderr = X_cv.std(ddof=1) / np.sqrt(X_cv.size) if X_cv.size > 1 else 0.0
     return est, stderr, b
+
+
+def mc_price_asian_arithmetic_cv(S0, K, r, T, sigma, steps, n_paths, rng, option_type):
+    """Price an arithmetic-average Asian option using geometric Asian control variates.
+
+    Uses the closed-form geometric Asian price as the control variate expectation,
+    exploiting the high correlation between arithmetic and geometric averages under GBM
+    to materially reduce standard error vs plain Monte Carlo.
+
+    Parameters
+    ----------
+    S0 : float
+        Initial spot price.
+    K : float
+        Strike price.
+    r : float
+        Continuously compounded risk-free rate.
+    T : float
+        Maturity in years.
+    sigma : float
+        Volatility (annualised, decimal).
+    steps : int
+        Number of equally spaced monitoring intervals.
+    n_paths : int
+        Number of Monte Carlo paths.
+    rng : object
+        Random source exposing ``normal(size=...)``.
+    option_type : str
+        Option side, case-insensitive: ``"call"`` or ``"put"``.
+
+    Returns
+    -------
+    dict
+        Standard MC result dictionary with ``price``, ``stderr``, ``ci_low``,
+        ``ci_high``, ``n_paths``, and ``extra``. ``extra`` contains:
+        - ``variance_reduction``: ``"control_variate"``
+        - ``cv_beta``: estimated optimal control coefficient
+        - ``geo_asian_price``: closed-form geometric Asian price used as EY
+    """
+    paths = simulate_gbm_paths(S0, r, sigma, T, steps, n_paths, rng=rng)
+    discount = np.exp(-r * T)
+
+    # Target: discounted arithmetic Asian payoff samples.
+    arithmetic_payoffs = discount * asian_arithmetic_payoff(paths, K, option_type)
+
+    # Control: discounted geometric Asian payoff samples with known expectation.
+    geo_avg = np.exp(np.mean(np.log(paths[:, 1:]), axis=1))
+    if option_type.lower() == "call":
+        geo_payoffs = discount * np.maximum(geo_avg - K, 0.0)
+    else:
+        geo_payoffs = discount * np.maximum(K - geo_avg, 0.0)
+
+    geo_price = price_geometric_asian(S0, K, r, sigma, T, steps, option_type)
+
+    est, stderr, b = control_variate(arithmetic_payoffs, geo_payoffs, geo_price)
+
+    result = build_result_iid(arithmetic_payoffs)
+    # Overwrite price/stderr with CV-adjusted estimates; CI uses adjusted stderr.
+    from .mc_results import Z_95
+    result["price"] = est
+    result["stderr"] = stderr
+    result["ci_low"] = est - Z_95 * stderr
+    result["ci_high"] = est + Z_95 * stderr
+    result["extra"] = {
+        "variance_reduction": "control_variate",
+        "cv_beta": b,
+        "geo_asian_price": geo_price,
+    }
+    return result

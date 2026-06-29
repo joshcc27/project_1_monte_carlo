@@ -46,3 +46,52 @@ def test_control_variate_rejects_empty_inputs():
     # Empty series should fail fast with a clear validation error.
     with pytest.raises(ValueError, match="non-empty"):
         control_variate([], [], 0.0)
+
+
+def test_mc_price_asian_arithmetic_cv_result_schema(asian_market, make_rng):
+    from src.variance_reduction import mc_price_asian_arithmetic_cv
+    params = dict(asian_market)
+    result = mc_price_asian_arithmetic_cv(
+        params["S0"], params["K"], params["r"], params["T"], params["sigma"],
+        steps=32, n_paths=10_000, rng=make_rng(1), option_type="call",
+    )
+    assert set(result.keys()) == {"price", "stderr", "ci_low", "ci_high", "n_paths", "extra"}
+    assert result["extra"]["variance_reduction"] == "control_variate"
+    assert "cv_beta" in result["extra"]
+    assert "geo_asian_price" in result["extra"]
+    assert result["ci_low"] < result["price"] < result["ci_high"]
+
+
+def test_mc_price_asian_arithmetic_cv_reduces_stderr(asian_market, sim_medium, make_rng):
+    from src.variance_reduction import mc_price_asian_arithmetic_cv
+    from src.mc import mc_price_asian_arithmetic
+    from src.gbm import simulate_gbm_paths
+    params = dict(asian_market)
+    steps = sim_medium["steps"]
+    n_paths = sim_medium["n_paths"]
+
+    rng_plain = make_rng(77)
+    paths = simulate_gbm_paths(
+        params["S0"], params["r"], params["sigma"], params["T"], steps, n_paths, rng=rng_plain
+    )
+    plain = mc_price_asian_arithmetic(paths, params["K"], params["r"], params["T"], "call")
+
+    rng_cv = make_rng(77)
+    cv = mc_price_asian_arithmetic_cv(
+        params["S0"], params["K"], params["r"], params["T"], params["sigma"],
+        steps, n_paths, rng_cv, "call",
+    )
+
+    # CV should materially reduce standard error.
+    assert plain["stderr"] / cv["stderr"] > 1.5
+
+
+def test_mc_price_asian_arithmetic_cv_put_branch(asian_market, make_rng):
+    from src.variance_reduction import mc_price_asian_arithmetic_cv
+    params = dict(asian_market)
+    result = mc_price_asian_arithmetic_cv(
+        params["S0"], params["K"], params["r"], params["T"], params["sigma"],
+        steps=64, n_paths=50_000, rng=make_rng(99), option_type="put",
+    )
+    assert result["price"] >= 0
+    assert result["stderr"] >= 0

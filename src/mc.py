@@ -9,7 +9,7 @@ Result-schema construction is delegated to ``src.mc_results``.
 """
 import numpy as np
 from .mc_results import build_result_iid, discount_payoffs
-from .payoffs import asian_arithmetic_payoff, european_payoff
+from .payoffs import asian_arithmetic_payoff, barrier_payoff, european_payoff
 
 
 def _mc_price(data, payoff_fn, K, r, T, option_type):
@@ -82,6 +82,42 @@ def mc_price_european(ST, K, r, T, option_type):
         raise ValueError("ST must be a 1D array-like of terminal prices")
 
     return _mc_price(st_arr, european_payoff, K, r, T, option_type)
+
+
+def mc_price_barrier(paths, K, r, T, barrier, barrier_type, option_type):
+    """Price a barrier option from full simulated paths.
+
+    Parameters
+    ----------
+    paths : array-like
+        Simulated path matrix of shape ``(n_paths, n_times)``.
+    K : float
+        Strike price.
+    r : float
+        Continuously compounded risk-free rate.
+    T : float
+        Time to maturity in years.
+    barrier : float
+        Barrier level.
+    barrier_type : str
+        One of ``"up_out"``, ``"up_in"``, ``"down_out"``, ``"down_in"``.
+    option_type : str
+        Option side, case-insensitive: ``"call"`` or ``"put"``.
+
+    Returns
+    -------
+    dict
+        Standard Monte Carlo result dictionary.
+    """
+    path_arr = np.asarray(paths, dtype=float)
+    if path_arr.ndim != 2:
+        raise ValueError("paths must be a 2D array-like with shape (n_paths, n_times)")
+    if path_arr.shape[1] < 2:
+        raise ValueError("paths must include at least one monitoring date beyond S0")
+
+    payoffs = barrier_payoff(path_arr, K, barrier, barrier_type, option_type)
+    discounted = discount_payoffs(payoffs, r, T)
+    return build_result_iid(discounted)
 
 
 def mc_price_asian_arithmetic(paths, K, r, T, option_type):

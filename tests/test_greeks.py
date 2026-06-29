@@ -82,15 +82,60 @@ def test_invalid_bump_sizes_raise_clear_errors():
 
 
 def test_greeks_output_contains_stderr_fields():
-    # Contract check: both Greeks expose uncertainty for both estimators.
+    # Contract check: all Greeks expose the expected fields.
     params = dict(S0=100.0, K=100.0, r=0.01, T=1.0, sigma=0.2, option_type='call')
     result = mc_european_greeks(steps=64, n_paths=20_000, rng=RNG(seed=42), **params)
-    assert "pathwise_stderr" in result["delta"]
-    assert "finite_difference_stderr" in result["delta"]
-    assert "pathwise_stderr" in result["vega"]
-    assert "finite_difference_stderr" in result["vega"]
-    assert result["delta"]["pathwise_stderr"] >= 0
-    assert result["delta"]["finite_difference_stderr"] >= 0
-    assert result["vega"]["pathwise_stderr"] >= 0
-    assert result["vega"]["finite_difference_stderr"] >= 0
+    for greek in ("delta", "vega"):
+        assert "pathwise_stderr" in result[greek]
+        assert "finite_difference_stderr" in result[greek]
+        assert result[greek]["pathwise_stderr"] >= 0
+        assert result[greek]["finite_difference_stderr"] >= 0
+    for greek in ("gamma", "theta", "rho"):
+        assert "finite_difference" in result[greek]
+        assert "finite_difference_stderr" in result[greek]
+        assert "analytic" in result[greek]
+        assert result[greek]["finite_difference_stderr"] >= 0
+
+
+def test_gamma_fd_close_to_analytic():
+    params = dict(S0=100.0, K=100.0, r=0.02, T=1.0, sigma=0.2, option_type='call')
+    result = mc_european_greeks(steps=128, n_paths=300_000, rng=RNG(seed=11), **params)
+    gamma_fd = result['gamma']['finite_difference']
+    gamma_an = result['gamma']['analytic']
+    rel_err = abs(gamma_fd - gamma_an) / gamma_an
+    assert rel_err < 0.05
+
+
+def test_theta_fd_close_to_analytic():
+    params = dict(S0=100.0, K=100.0, r=0.05, T=1.0, sigma=0.2, option_type='call')
+    result = mc_european_greeks(steps=128, n_paths=300_000, rng=RNG(seed=22), **params)
+    theta_fd = result['theta']['finite_difference']
+    theta_an = result['theta']['analytic']
+    # Both are negative; compare magnitudes via relative error.
+    rel_err = abs(theta_fd - theta_an) / abs(theta_an)
+    assert rel_err < 0.05
+
+
+def test_rho_fd_close_to_analytic():
+    params = dict(S0=100.0, K=100.0, r=0.05, T=1.0, sigma=0.2, option_type='call')
+    result = mc_european_greeks(steps=128, n_paths=300_000, rng=RNG(seed=33), **params)
+    rho_fd = result['rho']['finite_difference']
+    rho_an = result['rho']['analytic']
+    rel_err = abs(rho_fd - rho_an) / abs(rho_an)
+    assert rel_err < 0.05
+
+
+def test_gamma_analytic_same_for_call_and_put():
+    # Put-call parity implies gamma is identical for call and put.
+    params_call = dict(S0=100.0, K=100.0, r=0.02, T=1.0, sigma=0.2, option_type='call')
+    params_put = {**params_call, 'option_type': 'put'}
+    r_call = mc_european_greeks(steps=64, n_paths=10_000, rng=RNG(seed=0), **params_call)
+    r_put = mc_european_greeks(steps=64, n_paths=10_000, rng=RNG(seed=0), **params_put)
+    assert r_call['gamma']['analytic'] == r_put['gamma']['analytic']
+
+
+def test_h_T_validation():
+    params = dict(S0=100.0, K=100.0, r=0.01, T=1.0, sigma=0.2, option_type='call')
+    with pytest.raises(ValueError, match="h_T"):
+        mc_european_greeks(steps=64, n_paths=1_000, rng=RNG(seed=1), h_T=1.5, **params)
 

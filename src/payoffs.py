@@ -40,6 +40,61 @@ def european_payoff(ST, K, option_type):
     return np.maximum(K - ST, 0.0)
 
 
+def barrier_payoff(paths, K, barrier, barrier_type, option_type):
+    """Return vectorised barrier option payoff from full simulated paths.
+
+    The barrier is checked at every monitoring date (columns 1 onward).
+    Knock-out/knock-in is determined by whether the barrier is breached at
+    any monitored time step.
+
+    Parameters
+    ----------
+    paths : numpy.ndarray
+        Simulated path matrix of shape ``(n_paths, n_times)`` where column 0
+        is the initial spot and remaining columns are monitoring observations.
+    K : float
+        Strike price.
+    barrier : float
+        Barrier level.
+    barrier_type : str
+        One of ``"up_out"``, ``"up_in"``, ``"down_out"``, ``"down_in"``.
+        ``"up"`` means the barrier is above the initial spot; ``"out"`` means
+        the option is extinguished when the barrier is touched.
+    option_type : str
+        Option side, case-insensitive: ``"call"`` or ``"put"``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Pathwise payoffs after applying the barrier condition.
+
+    Raises
+    ------
+    ValueError
+        If ``barrier_type`` is not one of the four recognised strings, or if
+        the path matrix has fewer than two columns.
+    """
+    if paths.shape[1] < 2:
+        raise ValueError("paths must include at least one monitoring date beyond S0")
+
+    bt = barrier_type.lower()
+    valid = {"up_out", "up_in", "down_out", "down_in"}
+    if bt not in valid:
+        raise ValueError(f"barrier_type must be one of {sorted(valid)}, got '{barrier_type}'")
+
+    monitoring = paths[:, 1:]
+    if "up" in bt:
+        crossed = np.any(monitoring >= barrier, axis=1)
+    else:
+        crossed = np.any(monitoring <= barrier, axis=1)
+
+    vanilla = european_payoff(paths[:, -1], K, option_type)
+
+    if "out" in bt:
+        return np.where(crossed, 0.0, vanilla)
+    return np.where(crossed, vanilla, 0.0)
+
+
 def asian_arithmetic_payoff(paths, K, option_type):
     """Return vectorised arithmetic-average Asian option payoff.
 
