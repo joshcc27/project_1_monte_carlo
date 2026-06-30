@@ -1,3 +1,4 @@
+from .binomial import price_binomial
 from .bs_analytics import bs_delta, bs_gamma, bs_price, bs_rho, bs_theta, bs_vega
 from .gbm import simulate_gbm_paths
 from .greeks import mc_european_greeks
@@ -12,6 +13,7 @@ from .variance_reduction import (
 )
 
 __all__ = [
+    "price_binomial",
     "bs_delta",
     "bs_gamma",
     "bs_price",
